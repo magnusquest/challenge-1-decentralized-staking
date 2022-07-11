@@ -3,23 +3,64 @@ pragma solidity >=0.8.0 <0.9.0;
 
 import 'hardhat/console.sol';
 import './ExampleExternalContract.sol';
+import '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 
 contract Staker {
   ExampleExternalContract public exampleExternalContract;
 
-  constructor(address exampleExternalContractAddress) public {
+  mapping(address => uint256) public balances;
+
+  uint256 public constant threshold = 1 ether;
+  uint256 public deadline = block.timestamp + 30 seconds;
+
+  event Stake(address indexed sender, uint256 amount);
+  event Withdraw(address indexed sender, uint256 amount);
+
+  modifier deadlineReached(bool requireReached) {
+    uint256 timeRemaining = timeLeft();
+    if (requireReached) {
+      require(timeRemaining == 0, 'Deadline is not reached');
+    }
+    _;
+  }
+
+  modifier stakeNotCompleted() {
+    bool completed = exampleExternalContract.completed();
+    require(!completed, 'Staking process already completed');
+    _;
+  }
+
+  constructor(address exampleExternalContractAddress) {
     exampleExternalContract = ExampleExternalContract(exampleExternalContractAddress);
   }
 
-  // TODO: Collect funds in a payable `stake()` function and track individual `balances` with a mapping:
-  //  ( make sure to add a `Stake(address,uint256)` event and emit it for the frontend <List/> display )
+  function execute() public stakeNotCompleted deadlineReached(false) {
+    uint256 contractBalance = address(this).balance;
 
-  // TODO: After some `deadline` allow anyone to call an `execute()` function
-  //  It should call `exampleExternalContract.complete{value: address(this).balance}()` to send all the value
+    require(contractBalance >= threshold, 'Threshold not reached');
 
-  // TODO: if the `threshold` was not met, allow everyone to call a `withdraw()` function
+    (bool sent, ) = address(exampleExternalContract).call{value: contractBalance}(abi.encodeWithSignature('complete()'));
+    require(sent, 'exampleExternalContract.complete failed');
+  }
 
-  // TODO: Add a `timeLeft()` view function that returns the time left before the deadline for the frontend
+  function stake() public payable deadlineReached(false) stakeNotCompleted {
+    balances[msg.sender] += msg.value;
+    emit Stake(msg.sender, msg.value);
+  }
 
-  // TODO: Add the `receive()` special function that receives eth and calls stake()
+  function withdraw() public deadlineReached(true) stakeNotCompleted {
+    uint256 userBalance = balances[msg.sender];
+    require(userBalance > 0, "You don't have balance to withdraw");
+    balances[msg.sender] = 0;
+    (bool sent, ) = msg.sender.call{value: userBalance}('');
+    require(sent, 'Failed to send user balance back to the user');
+  }
+
+  function timeLeft() public view returns (uint256 timeLeft) {
+    if (block.timestamp >= deadline) {
+      return 0;
+    } else {
+      return deadline - block.timestamp;
+    }
+  }
 }

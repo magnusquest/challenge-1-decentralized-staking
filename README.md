@@ -1,3 +1,7 @@
+# https://martinistaking.surge.sh/
+## Get some rinkeby Eth! https://rinkebyfaucet.com/
+
+
 # 🏗 scaffold-eth | 🏰 BuidlGuidl
 
 ## 🚩 Challenge 1: 🥩 Decentralized Staking App
